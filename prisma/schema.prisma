@@ -1,0 +1,159 @@
+// This is your Prisma schema file,
+// learn more about it in the docs: https://pris.ly/d/prisma-schema
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id            String    @id @default(uuid()) // Internal ID
+  walletAddress String    @unique              // Map to Privy
+  name          String?
+  bio           String?
+  imageCid      String?
+  role          String    @default("fan")      // "artist" or "fan"
+  createdAt     DateTime  @default(now())
+
+  // Relations
+  following     Follow[]  @relation("follower")
+  followers     Follow[]  @relation("following")
+  posts         Post[]
+  comments      Comment[]
+  likes         Like[]
+  fanClub       FanClub?  // 1-to-1: Artist has one fan club
+  memberships   ClubMember[] // Clubs this user has joined
+  clubMessages  ClubMessage[]
+}
+
+model Follow {
+  id          String   @id @default(uuid())
+  followerId  String
+  followingId String
+  createdAt   DateTime @default(now())
+
+  follower    User     @relation("follower", fields: [followerId], references: [id])
+  following   User     @relation("following", fields: [followingId], references: [id])
+
+  @@unique([followerId, followingId]) // Prevent duplicate follows
+}
+
+model Post {
+  id              String   @id @default(uuid())
+  authorId        String
+  content         String
+  mediaUrl        String?  // Optional image/video
+  embeddedTrackId String?  // Optional: TokenID of a song to display
+  tierId          String?  // Optional: If set, only members of this tier can view
+  createdAt       DateTime @default(now())
+
+  author   User      @relation(fields: [authorId], references: [id])
+  tier     ClubTier? @relation(fields: [tierId], references: [id])
+  comments Comment[]
+  likes    Like[]
+}
+
+model Comment {
+  id        String   @id @default(uuid())
+  postId    String
+  authorId  String
+  content   String
+  createdAt DateTime @default(now())
+
+  post   Post @relation(fields: [postId], references: [id])
+  author User @relation(fields: [authorId], references: [id])
+}
+
+model Like {
+  id        String   @id @default(uuid())
+  postId    String
+  userId    String
+  createdAt DateTime @default(now())
+
+  post Post @relation(fields: [postId], references: [id])
+  user User @relation(fields: [userId], references: [id])
+
+  @@unique([postId, userId]) // One like per post per user
+}
+
+// --- Fan Club & Events ---
+
+model FanClub {
+  id          String   @id @default(uuid())
+  artistId    String   @unique
+  name        String
+  description String?
+  bannerUrl   String?
+  createdAt   DateTime @default(now())
+
+  artist  User         @relation(fields: [artistId], references: [id])
+  tiers   ClubTier[]
+  members ClubMember[]
+  posts   ClubPost[]
+  messages ClubMessage[]
+}
+
+model ClubTier {
+  id           String   @id @default(uuid())
+  clubId       String
+  name         String   // e.g. "Free", "VIP"
+  price        Float    @default(0) // 0 for free
+  currency     String   @default("USDC")
+  nftContract  String?  // If paid, this contract gates access
+  createdAt    DateTime @default(now())
+
+  club    FanClub      @relation(fields: [clubId], references: [id])
+  members ClubMember[]
+  posts   Post[]
+}
+
+model ClubMember {
+  id        String   @id @default(uuid())
+  userId    String
+  clubId    String
+  tierId    String
+  joinedAt  DateTime @default(now())
+  
+  user    User     @relation(fields: [userId], references: [id])
+  club    FanClub  @relation(fields: [clubId], references: [id])
+  tier    ClubTier @relation(fields: [tierId], references: [id])
+
+  @@unique([userId, clubId])
+}
+
+model ClubMessage {
+  id        String   @id @default(uuid())
+  clubId    String
+  userId    String
+  content   String
+  imageCid  String?
+  createdAt DateTime @default(now())
+
+  club    FanClub @relation(fields: [clubId], references: [id])
+  user    User    @relation(fields: [userId], references: [id])
+}
+
+
+model ClubPost {
+  id        String   @id @default(uuid())
+  clubId    String
+  content   String
+  mediaUrl  String?
+  createdAt DateTime @default(now())
+
+  club FanClub @relation(fields: [clubId], references: [id])
+}
+
+model Event {
+  id          String   @id @default(uuid())
+  artistId    String // Usually same as club owner, but separate entity
+  title       String
+  description String?
+  date        DateTime
+  location    String?  // URL or Physical
+  createdAt   DateTime @default(now())
+}

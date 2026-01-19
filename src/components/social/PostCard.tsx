@@ -1,6 +1,6 @@
 'use client';
 
-import { Avatar, Card, Button, Image, Typography } from 'antd';
+import { Avatar, Image, Typography } from 'antd';
 import { HeartOutlined, CommentOutlined, UserOutlined } from '@ant-design/icons';
 import Link from 'next/link';
 import { useReadContract } from 'wagmi';
@@ -33,7 +33,7 @@ export function PostCard({ post }: PostProps) {
     }, [post.embeddedTrackId, allTracks]);
 
     return (
-        <Card className="mb-6 hover:shadow-md transition-shadow border-slate-100">
+        <div className="glass rounded-2xl p-6 mb-6 hover:bg-white/5 transition-colors border border-white/5">
             <div className="flex gap-4">
                 <Link href={`/profile/${post.author.walletAddress}`}>
                     <Avatar
@@ -46,45 +46,51 @@ export function PostCard({ post }: PostProps) {
                 <div className="flex-1">
                     <div className="flex justify-between items-center mb-2">
                         <div>
-                            <Link href={`/profile/${post.author.walletAddress}`} className="font-bold text-slate-900 hover:text-blue-500 mr-2">
+                            <Link href={`/profile/${post.author.walletAddress}`} className="font-bold text-foreground hover:text-primary mr-2">
                                 {post.author.name || 'Anonymous'}
                             </Link>
                             <span className="text-gray-400 text-sm">
                                 {new Date(post.createdAt).toLocaleDateString()}
                             </span>
                         </div>
-                        {post.author.role === 'artist' && <span className="bg-purple-100 text-purple-600 text-xs px-2 py-0.5 rounded-full font-bold">ARTIST</span>}
+                        {post.author.role === 'artist' && (
+                            <span className="bg-primary/20 text-primary-foreground text-xs px-2 py-0.5 rounded-full font-bold border border-primary/30">
+                                ARTIST
+                            </span>
+                        )}
                     </div>
 
-                    <Paragraph className="text-lg text-slate-700 whitespace-pre-wrap mb-4">
+                    <p className="text-lg text-gray-200 whitespace-pre-wrap mb-4 font-light">
                         {post.content}
-                    </Paragraph>
+                    </p>
 
                     {post.mediaUrl && (
-                        <div className="mb-4 rounded-xl overflow-hidden">
+                        <div className="mb-4 rounded-xl overflow-hidden glass border-0">
                             <Image src={post.mediaUrl} alt="Post media" style={{ maxHeight: 400, objectFit: 'cover' }} />
                         </div>
                     )}
 
                     {embeddedTrack && (
-                        <div className="mb-4 bg-slate-50 p-3 rounded-xl border border-slate-100">
-                            <Text type="secondary" className="block mb-2 text-xs uppercase tracking-wide font-bold">Featured Track</Text>
+                        <div className="mb-4 bg-black/30 p-4 rounded-xl border border-white/10 backdrop-blur-sm">
+                            <Text type="secondary" className="block mb-2 text-xs uppercase tracking-wide font-bold text-gray-500">Featured Track</Text>
                             <div className="max-w-sm">
                                 <SongCard track={embeddedTrack} />
                             </div>
                         </div>
                     )}
 
-                    <div className="flex gap-6 mt-4 text-gray-500">
-                        <Button type="text" icon={<HeartOutlined />}>
-                            {post._count?.likes || 0}
-                        </Button>
-                        <Button type="text" icon={<CommentOutlined />}>
-                            {post._count?.comments || 0}
-                        </Button>
+                    <div className="flex gap-6 mt-4 pt-4 border-t border-white/5">
+                        <button className="flex items-center gap-2 text-gray-400 hover:text-pink-500 transition-colors">
+                            <HeartOutlined />
+                            <span>{post._count?.likes || 0}</span>
+                        </button>
+                        <button className="flex items-center gap-2 text-gray-400 hover:text-blue-400 transition-colors">
+                            <CommentOutlined />
+                            <span>{post._count?.comments || 0}</span>
+                        </button>
                     </div>
                 </div>
             </div>
-        </Card>
+        </div>
     );
 }

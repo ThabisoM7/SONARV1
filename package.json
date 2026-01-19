@@ -17,6 +17,7 @@
     "@privy-io/wagmi": "^3.0.0",
     "@tanstack/react-query": "^5.90.18",
     "antd": "^6.2.0",
+    "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
     "lucide-react": "^0.562.0",
     "next": "16.1.3",
@@ -24,6 +25,7 @@
     "react": "19.2.3",
     "react-dom": "19.2.3",
     "tailwind-merge": "^3.4.0",
+    "tailwindcss-animate": "^1.0.7",
     "viem": "^2.44.4",
     "wagmi": "^3.3.2",
     "wavesurfer.js": "^7.12.1"

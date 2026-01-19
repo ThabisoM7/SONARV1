@@ -34,6 +34,29 @@ contract CR8TEMusic is ERC1155, ERC1155URIStorage, Ownable, ERC2981 {
         // Store Track Data
         tracks.push(Track(tokenId, msg.sender, _tokenURI));
 
+        return tokenId;
+    }
+
+    /**
+     * @dev Mint a track to a specific address (Server-Side / Gasless Minting)
+     * Only the Owner (Admin Wallet) can call this.
+     */
+    function mintTo(
+        address _to,
+        string memory _tokenURI,
+        uint96 _royaltyFeeNumerator,
+        address _royaltyReceiver
+    ) public onlyOwner returns (uint256) {
+        uint256 tokenId = nextTokenId;
+        _mint(_to, tokenId, 1, ""); // Mint 1 edition to the specified user
+        _setURI(tokenId, _tokenURI);
+
+        // Set Royalty
+        _setTokenRoyalty(tokenId, _royaltyReceiver, _royaltyFeeNumerator);
+
+        // Store Track Data (Artist is the receiver)
+        tracks.push(Track(tokenId, _to, _tokenURI));
+
         nextTokenId++;
         return tokenId;
     }

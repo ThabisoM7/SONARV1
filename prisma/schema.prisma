@@ -28,6 +28,11 @@ model User {
   fanClub       FanClub?  // 1-to-1: Artist has one fan club
   memberships   ClubMember[] // Clubs this user has joined
   clubMessages  ClubMessage[]
+  
+  // V3 Music Graph
+  collections   Collection[]
+  tracks        Track[]
+  streamHistory Stream[]
 }
 
 model Follow {
@@ -156,4 +161,55 @@ model Event {
   date        DateTime
   location    String?  // URL or Physical
   createdAt   DateTime @default(now())
+}
+
+// --- V3 Music Graph ---
+
+model Collection {
+  id          String   @id @default(uuid())
+  title       String
+  type        String   // "SINGLE", "EP", "ALBUM"
+  artistId    String
+  coverUrl    String
+  description String?
+  createdAt   DateTime @default(now())
+  
+  tracks      Track[]
+  artist      User     @relation(fields: [artistId], references: [id])
+}
+
+model Track {
+  id           String   @id @default(uuid())
+  title        String
+  artistId     String
+  collectionId String
+  audioUrl     String   // IPFS URL
+  duration     Int      // Seconds
+  trackNumber  Int      // Order in album
+  streamCount  Int      @default(0)
+  createdAt    DateTime @default(now())
+  
+  artist      User         @relation(fields: [artistId], references: [id])
+  collection  Collection   @relation(fields: [collectionId], references: [id])
+  streams     Stream[]
+  splits      RoyaltySplit[]
+}
+
+model Stream {
+  id         String   @id @default(uuid())
+  trackId    String
+  listenerId String?  // Optional (if logged in)
+  playedAt   DateTime @default(now())
+
+  track      Track    @relation(fields: [trackId], references: [id])
+  listener   User?    @relation(fields: [listenerId], references: [id]) // Analytics
+}
+
+model RoyaltySplit {
+  id        String @id @default(uuid())
+  trackId   String
+  recipientAddress String
+  percentage Float
+
+  track     Track  @relation(fields: [trackId], references: [id])
 }

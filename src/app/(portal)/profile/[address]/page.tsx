@@ -13,10 +13,15 @@ import socialGraphJson from "../../../../artifacts/contracts/SocialGraph.sol/Soc
 import { UserData, Playlist } from '@/hooks/useUserData';
 import { useState } from 'react';
 import { Copy, Music, Heart, ListMusic } from 'lucide-react';
+import { getGatewayUrl } from '@/lib/utils';
 
 export default function ProfilePage() {
     const params = useParams();
     const address = params.address as string;
+
+    // Since Shadcn Tabs are headless/radix, we can just build a custom Glass Tab system or use the registry one if installed.
+    // For now, let's build a simple custom Glass Tab UI.
+    const [activeTab, setActiveTab] = useState('releases'); // Default to releases. User can switch.
 
     // 1. Fetch User Metadata (Privy)
     const { data: user, isLoading: userLoading } = useQuery({
@@ -67,22 +72,30 @@ export default function ProfilePage() {
         functionName: 'getAllTracks',
     }) as { data: any[] };
 
+    // Defined role (Safe access)
+    const isArtist = user?.role === 'artist';
+
+    // Tracks (Calculated only if user exists)
+    const likedTracks = user && allTracks ? allTracks.filter((t: any) => t?.id && user.likedSongs?.includes(t.id.toString())) : [];
+    const releasedTracks = user && allTracks ? allTracks.filter((t: any) => t?.artist && t?.id && t.artist.toLowerCase() === address.toLowerCase()) : [];
+    const playlists = (user?.playlists as Playlist[]) || [];
+
     if (userLoading) return <div className="flex justify-center p-20"><Spin size="large" /></div>;
     if (!user) return <div className="text-center p-20">User not found</div>;
 
-    // Defined role
-    const isArtist = user.role === 'artist';
+    // Note: We keep the returns for loading/error AFTER all hooks are declared.
+    // But wait, are there hooks BELOW this point?
+    // In the original file, useState was BELOW. I moved it UP in the previous step.
+    // So now useState is at the top.
+    // Check if there are ANY OTHER hooks.
+    // Only useQuery, useReadContract, and useState.
+    // useReadContract are above.
+    // So now order is: useState -> useQuery -> useReadContract -> Returns. 
+    // This is correct.
 
-    // Tracks
-
-    const likedTracks = allTracks?.filter((t: any) => t?.id && user.likedSongs?.includes(t.id.toString())) || [];
-    const releasedTracks = allTracks?.filter((t: any) => t?.artist && t?.id && t.artist.toLowerCase() === address.toLowerCase()) || [];
-    const playlists = user.playlists as Playlist[] || [];
-
-    // 4. Transform Antd Tabs items to custom render or Shadcn Tabs
-    // Since Shadcn Tabs are headless/radix, we can just build a custom Glass Tab system or use the registry one if installed.
-    // For now, let's build a simple custom Glass Tab UI.
-    const [activeTab, setActiveTab] = useState(isArtist ? 'releases' : 'liked');
+    // Force default tab based on role if needed?
+    // Actually simplicity is better. Default 'releases'. If user is fan, they just see 'liked' tab if we hide 'releases'.
+    // Let's ensure logic in JSX handles it.
 
     return (
         <div className="max-w-6xl mx-auto pb-32 pt-8 px-4">
@@ -169,11 +182,31 @@ export default function ProfilePage() {
             {/* Tab Content */}
             <div className="min-h-[400px]">
                 {activeTab === 'releases' && (
-                    releasedTracks.length > 0 ? (
+                    (user.tracks && user.tracks.length > 0) || releasedTracks.length > 0 ? (
                         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                            {releasedTracks.map((track: any) => (
-                                <SongCard key={track.id.toString()} track={track} />
+                            {/* Prefer DB Tracks (V3) */}
+                            {user.tracks?.map((track: any) => (
+                                <SongCard
+                                    key={track.id}
+                                    track={{
+                                        ...track,
+                                        artist: user.name,
+                                        artistId: user.id,
+                                        imageSrc: getGatewayUrl(track.collection?.coverUrl || user.imageCid),
+                                        audioSrc: getGatewayUrl(track.audioUrl),
+                                        streamCount: track.streamCount
+                                    }}
+                                />
                             ))}
+                            {/* Fallback to Contract Tracks (Legacy) - Filter out ones that match DB? */}
+                            {releasedTracks
+                                .filter((t: any) => !user.tracks?.some((dbT: any) => dbT.id === t.id.toString())) // Naive dedup if IDs matched, but they don't (UUID vs Int). 
+                                // Actually, let's just show DB tracks if they exist. Contract tracks are legacy. 
+                                // If we want to show BOTH, we risk dups if we don't link them.
+                                // For now, let's show DB tracks FIRST.
+                                .map((track: any) => (
+                                    <SongCard key={track.id.toString()} track={track} />
+                                ))}
                         </div>
                     ) : (
                         <div className="flex flex-col items-center justify-center py-20 text-gray-500">

@@ -12,12 +12,13 @@ const queryClient = new QueryClient();
 
 export const wagmiConfig = createConfig({
     chains: [polygonAmoy],
-    [polygonAmoy.id]: fallback([
-        http("https://polygon-amoy.drpc.org"),       // High perf public node
-        http("https://rpc.ankr.com/polygon_amoy"),   // Backup 1
-        http("https://rpc-amoy.polygon.technology"), // Backup 2 (Official but flaky)
-        http(),
-    ]),
+    transports: {
+        [polygonAmoy.id]: fallback([
+            http(process.env.NEXT_PUBLIC_ALCHEMY_AMOY_URL),
+            http("https://rpc-amoy.polygon.technology"),
+            http(),
+        ]),
+    },
 });
 
 export function Providers({ children }: { children: React.ReactNode }) {
@@ -34,6 +35,8 @@ export function Providers({ children }: { children: React.ReactNode }) {
                 embeddedWallets: {
                     createOnLogin: 'users-without-wallets',
                 },
+                defaultChain: polygonAmoy,
+                supportedChains: [polygonAmoy]
             }}
         >
             <QueryClientProvider client={queryClient}>
@@ -43,7 +46,7 @@ export function Providers({ children }: { children: React.ReactNode }) {
                             theme={{
                                 algorithm: theme.defaultAlgorithm,
                                 token: {
-                                    colorPrimary: '#1677ff', // Ant Design Blue
+                                    colorPrimary: '#1677ff',
                                     fontFamily: 'var(--font-geist-sans)',
                                     borderRadius: 6,
                                 },

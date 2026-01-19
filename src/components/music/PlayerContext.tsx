@@ -1,35 +1,57 @@
 'use client';
 
-import { createContext, useContext, useState, ReactNode } from 'react';
+import { createContext, useContext, useState, ReactNode, useMemo } from 'react';
 
-interface Track {
-    tokenId: string;
+export interface PlayerTrack {
+    id: string;       // DB ID (UUID)
+    title: string;
     artist: string;
-    uri: string;
-    metadata?: any; // To store name, image from IPFS JSON
+    audioSrc: string; // Full URL (gateway resolved or not)
+    imageSrc: string; // Full URL
+    collectionId?: string;
+    duration?: number;
 }
 
 interface PlayerContextType {
-    currentTrack: Track | null;
+    currentTrack: PlayerTrack | null;
+    queue: PlayerTrack[];
     isPlaying: boolean;
-    playTrack: (track: Track) => void;
+    playTrack: (track: PlayerTrack) => void;
+    playCollection: (tracks: PlayerTrack[], startIndex?: number) => void;
     pauseTrack: () => void;
     togglePlay: () => void;
+    nextTrack: () => void;
+    prevTrack: () => void;
 }
 
 const PlayerContext = createContext<PlayerContextType | undefined>(undefined);
 
 export function PlayerProvider({ children }: { children: ReactNode }) {
-    const [currentTrack, setCurrentTrack] = useState<Track | null>(null);
+    const [queue, setQueue] = useState<PlayerTrack[]>([]);
+    const [currentIndex, setCurrentIndex] = useState<number>(-1);
     const [isPlaying, setIsPlaying] = useState(false);
 
-    const playTrack = (track: Track) => {
-        if (currentTrack?.tokenId === track.tokenId) {
+    const currentTrack = useMemo(() => {
+        if (currentIndex >= 0 && currentIndex < queue.length) {
+            return queue[currentIndex];
+        }
+        return null;
+    }, [queue, currentIndex]);
+
+    const playTrack = (track: PlayerTrack) => {
+        if (currentTrack?.id === track.id) {
             setIsPlaying(true);
         } else {
-            setCurrentTrack(track);
+            setQueue([track]);
+            setCurrentIndex(0);
             setIsPlaying(true);
         }
+    };
+
+    const playCollection = (tracks: PlayerTrack[], startIndex = 0) => {
+        setQueue(tracks);
+        setCurrentIndex(startIndex);
+        setIsPlaying(true);
     };
 
     const pauseTrack = () => setIsPlaying(false);
@@ -38,8 +60,36 @@ export function PlayerProvider({ children }: { children: ReactNode }) {
         if (currentTrack) setIsPlaying(!isPlaying);
     };
 
+    const nextTrack = () => {
+        if (currentIndex < queue.length - 1) {
+            setCurrentIndex(currentIndex + 1);
+            setIsPlaying(true);
+        } else {
+            // End of queue
+            setIsPlaying(false);
+            setCurrentIndex(0); // Reset or stop?
+        }
+    };
+
+    const prevTrack = () => {
+        if (currentIndex > 0) {
+            setCurrentIndex(currentIndex - 1);
+            setIsPlaying(true);
+        }
+    };
+
     return (
-        <PlayerContext.Provider value={{ currentTrack, isPlaying, playTrack, pauseTrack, togglePlay }}>
+        <PlayerContext.Provider value={{
+            currentTrack,
+            queue,
+            isPlaying,
+            playTrack,
+            playCollection,
+            pauseTrack,
+            togglePlay,
+            nextTrack,
+            prevTrack
+        }}>
             {children}
         </PlayerContext.Provider>
     );

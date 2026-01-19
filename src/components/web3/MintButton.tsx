@@ -1,10 +1,9 @@
 'use client';
 
-import { useWriteContract, useWaitForTransactionReceipt, useAccount, useChainId, useSwitchChain } from "wagmi";
-import { polygonAmoy } from "wagmi/chains";
+import { useAccount } from "wagmi";
+import { usePrivy } from "@privy-io/react-auth";
 import { Button, message, notification } from "antd";
-import { parseEther } from "viem";
-import { useEffect } from "react";
+import { useState } from "react";
 import contractJson from "../../artifacts/contracts/CR8TEMusic.sol/CR8TEMusic.json";
 
 // Using the ABI from the compiled artifact
@@ -18,31 +17,11 @@ interface MintButtonProps {
 }
 
 export function MintButton({ metadataCid, onSuccess, receiver }: MintButtonProps) {
-    const { address } = useAccount();
-    const chainId = useChainId();
-    const { switchChain } = useSwitchChain();
-    const { writeContract, data: hash, isPending, error } = useWriteContract();
-    const { isLoading: isConfirming, isSuccess: isConfirmed } = useWaitForTransactionReceipt({
-        hash,
-    });
+    const { address } = useAccount(); // Still need specific user address
+    const { getAccessToken } = usePrivy();
+    const [loading, setLoading] = useState(false);
 
-    useEffect(() => {
-        if (isConfirmed) {
-            notification.success({
-                message: 'Mint Successful!',
-                description: 'Your track has been minted as an NFT on Polygon Amoy.',
-            });
-            onSuccess();
-        }
-        if (error) {
-            notification.error({
-                message: 'Mint Failed',
-                description: error.message
-            });
-        }
-    }, [isConfirmed, error, onSuccess]);
-
-    const handleMint = () => {
+    const handleMint = async () => {
         if (!CONTRACT_ADDRESS) {
             message.error('Contract setup incomplete');
             return;
@@ -52,30 +31,40 @@ export function MintButton({ metadataCid, onSuccess, receiver }: MintButtonProps
             return;
         }
 
-        if (chainId !== polygonAmoy.id) {
-            switchChain({ chainId: polygonAmoy.id });
-            return;
+        try {
+            setLoading(true);
+            const token = await getAccessToken();
+
+            const response = await fetch('/api/music/mint', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({
+                    authToken: token,
+                    metadataCid,
+                    receiver: receiver || address, // Mint to this address
+                })
+            });
+
+            const data = await response.json();
+
+            if (!response.ok) {
+                throw new Error(data.error || 'Minting failed');
+            }
+
+            notification.success({
+                message: 'Mint Successful!',
+                description: `Track minted! Tx: ${data.txHash.slice(0, 10)}...`,
+            });
+            onSuccess();
+        } catch (error: any) {
+            console.error("Mint Error:", error);
+            notification.error({
+                message: 'Mint Failed',
+                description: error.message
+            });
+        } finally {
+            setLoading(false);
         }
-
-        const tokenUri = `ipfs://${metadataCid}`;
-        // Royalty Fee: 500 = 5% (Basis points)
-        // Royalty Receiver: Component prop OR current wallet
-        const royaltyReceiver = receiver || address;
-
-        console.log("Minting with:", {
-            uri: tokenUri,
-            fee: 500,
-            receiver: royaltyReceiver,
-            contract: CONTRACT_ADDRESS
-        });
-
-        writeContract({
-            address: CONTRACT_ADDRESS,
-            abi: ABI,
-            functionName: 'mintTrack',
-            args: [tokenUri, 500, royaltyReceiver],
-            gas: BigInt(1000000) // High gas limit to force transaction through
-        });
     };
 
     return (
@@ -84,10 +73,10 @@ export function MintButton({ metadataCid, onSuccess, receiver }: MintButtonProps
             size="large"
             block
             onClick={handleMint}
-            loading={isPending || isConfirming}
+            loading={loading}
             disabled={!metadataCid}
         >
-            {isPending ? 'Minting...' : isConfirming ? 'Confirming Transaction...' : 'Mint NFT (Polygon Amoy)'}
+            {loading ? 'Minting (Gasless)...' : 'Mint NFT (Polygon Amoy)'}
         </Button>
     );
 }

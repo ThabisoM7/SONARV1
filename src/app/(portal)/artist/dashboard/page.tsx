@@ -6,8 +6,10 @@ import { UserOutlined, EditOutlined, SoundOutlined } from "@ant-design/icons";
 import { usePrivy } from "@privy-io/react-auth"; // For user metadata
 import { useState, useMemo } from "react";
 import { EditProfileModal } from "@/components/artist/EditProfileModal";
-import { useReadContract, useAccount } from "wagmi";
-import contractJson from "../../../../../src/artifacts/contracts/CR8TEMusic.sol/CR8TEMusic.json";
+import { useQuery } from "@tanstack/react-query";
+import { getGatewayUrl } from "@/lib/utils";
+import { useAccount } from "wagmi";
+// import contractJson from "../../../../../src/artifacts/contracts/CR8TEMusic.sol/CR8TEMusic.json";
 import { SongCard } from "@/components/music/SongCard";
 
 const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
@@ -17,30 +19,26 @@ function ArtistDashboard() {
     const { address } = useAccount();
     const [isEditModalOpen, setIsEditModalOpen] = useState(false);
 
-    // Fetch Tracks
-    const { data: rawTracks, isLoading: tracksLoading } = useReadContract({
-        address: CONTRACT_ADDRESS,
-        abi: contractJson.abi,
-        functionName: 'getAllTracks',
+    // Fetch User Data from DB (includes tracks)
+    const { data: dbUser, isLoading: dbLoading } = useQuery({
+        queryKey: ['dashboard-user', address],
+        queryFn: async () => {
+            if (!address) return null;
+            const res = await fetch(`/api/users/${address}`);
+            if (!res.ok) throw new Error('Failed');
+            return res.json();
+        },
+        enabled: !!address
     });
 
-    // Parse and Filter Tracks
-    const myTracks = useMemo(() => {
-        if (!rawTracks || !Array.isArray(rawTracks) || !address) return [];
-        return rawTracks
-            .map((t: any) => ({
-                id: t.id, // Keep as bigint or string? SongCard expects bigint usually but let's see. t.id from contract is bigint.
-                artist: t.artist,
-                uri: t.uri
-            }))
-            .filter(t => t.artist.toLowerCase() === address.toLowerCase());
-    }, [rawTracks, address]);
+    const myTracks = useMemo(() => dbUser?.tracks || [], [dbUser]);
 
-    // Parse Privy Metadata
-    const customMeta = user?.customMetadata as any || {};
-    const displayName = customMeta.name || "Anonymous Artist";
-    const bio = customMeta.bio || "No bio yet.";
-    const pfpUrl = customMeta.imageCid ? `https://gateway.pinata.cloud/ipfs/${customMeta.imageCid}` : undefined;
+    // Parse Metadata (Prefer DB data if available, fallback to Privy)
+    const displayName = dbUser?.name || user?.customMetadata?.name || "Anonymous Artist";
+    const bio = dbUser?.bio || user?.customMetadata?.bio || "No bio yet.";
+    const pfpUrl = dbUser?.imageCid
+        ? getGatewayUrl(dbUser.imageCid)
+        : (user?.customMetadata?.imageCid ? getGatewayUrl(user.customMetadata.imageCid) : undefined);
 
     return (
         <div className="space-y-8 pb-20">
@@ -92,7 +90,7 @@ function ArtistDashboard() {
                             value={myTracks.length}
                             prefix={<SoundOutlined className="text-primary mr-2" />}
                             valueStyle={{ color: 'white', fontWeight: 'bold' }}
-                            loading={tracksLoading}
+                            loading={dbLoading}
                         />
                     </div>
                 </Col>
@@ -101,7 +99,7 @@ function ArtistDashboard() {
             {/* My Catalog */}
             <div className="space-y-6">
                 <h2 className="text-2xl font-bold text-foreground">My Catalog</h2>
-                {tracksLoading ? (
+                {dbLoading ? (
                     <div className="text-center py-20"><Spin size="large" /></div>
                 ) : myTracks.length === 0 ? (
                     <div className="text-center py-20 glass rounded-2xl border border-white/5">
@@ -112,9 +110,18 @@ function ArtistDashboard() {
                     </div>
                 ) : (
                     <Row gutter={[24, 24]}>
-                        {myTracks.map((track) => (
-                            <Col xs={24} sm={12} md={8} lg={6} key={track.id.toString()}>
-                                <SongCard track={track} />
+                        {myTracks.map((track: any) => (
+                            <Col xs={24} sm={12} md={8} lg={6} key={track.id}>
+                                <SongCard
+                                    track={{
+                                        ...track,
+                                        artist: displayName, // We know it's me
+                                        artistId: user?.id, // For ownership check
+                                        imageSrc: getGatewayUrl(track.collection?.coverUrl || dbUser?.imageCid),
+                                        audioSrc: getGatewayUrl(track.audioUrl),
+                                        streamCount: track.streamCount
+                                    }}
+                                />
                             </Col>
                         ))}
                     </Row>
@@ -127,7 +134,7 @@ function ArtistDashboard() {
                 onSuccess={() => window.location.reload()} // Simple reload to refresh Privy data
                 currentName={displayName}
                 currentBio={bio}
-                currentImageCid={customMeta.imageCid}
+                currentImageCid={dbUser?.imageCid || (user?.customMetadata as any)?.imageCid}
             />
         </div>
     );

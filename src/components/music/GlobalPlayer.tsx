@@ -3,20 +3,22 @@
 import { usePlayer } from './PlayerContext';
 import { Play, Pause, SkipBack, SkipForward, Music } from 'lucide-react';
 import { useEffect, useRef, useState } from 'react';
-
-
+import { usePrivy } from '@privy-io/react-auth';
 
 export function GlobalPlayer() {
-    const { currentTrack, isPlaying, togglePlay } = usePlayer();
+    const { currentTrack, isPlaying, togglePlay, nextTrack, prevTrack } = usePlayer();
     const audioRef = useRef<HTMLAudioElement | null>(null);
     const [currentTime, setCurrentTime] = useState(0);
     const [duration, setDuration] = useState(0);
+    const { getAccessToken } = usePrivy();
 
-    const getGatewayUrl = (ipfsUri: string) => {
-        if (!ipfsUri) return '';
-        const cid = ipfsUri.replace('ipfs://', '');
-        return `https://gateway.pinata.cloud/ipfs/${cid}`;
-    };
+    // Stream Counting State
+    const [hasCountedStream, setHasCountedStream] = useState(false);
+
+    useEffect(() => {
+        // Reset stream count when track changes
+        setHasCountedStream(false);
+    }, [currentTrack?.id]);
 
     useEffect(() => {
         if (isPlaying) {
@@ -24,27 +26,46 @@ export function GlobalPlayer() {
         } else {
             audioRef.current?.pause();
         }
-    }, [isPlaying]);
+    }, [isPlaying, currentTrack]); // Added currentTrack dependency to ensure auto-play on switch
 
     const handleTimeUpdate = () => {
         if (audioRef.current) {
-            setCurrentTime(audioRef.current.currentTime);
+            const time = audioRef.current.currentTime;
+            setCurrentTime(time);
             setDuration(audioRef.current.duration || 0);
+
+            // Stream Count Logic: Count after 30 seconds
+            // Also ensure we haven't counted this session yet
+            if (time > 30 && !hasCountedStream && currentTrack?.id) {
+                recordStream(currentTrack.id);
+                setHasCountedStream(true);
+            }
         }
     };
 
-    if (!currentTrack) return null;
+    const recordStream = async (trackId: string) => {
+        try {
+            const token = await getAccessToken();
+            // Fire and forget
+            fetch('/api/music/stream', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ trackId, authToken: token })
+            });
+        } catch (e) {
+            console.error("Stream record failed", e);
+        }
+    }
 
-    const audioSrc = currentTrack.metadata?.animation_url ? getGatewayUrl(currentTrack.metadata.animation_url) : '';
-    const imageSrc = currentTrack.metadata?.image ? getGatewayUrl(currentTrack.metadata.image) : '';
+    if (!currentTrack) return null;
 
     return (
         <div className="fixed bottom-6 left-1/2 -translate-x-1/2 w-[95%] md:w-[600px] h-20 glass rounded-full z-50 flex items-center px-2 pr-6 shadow-[0_8px_32px_rgba(0,0,0,0.4)] backdrop-blur-xl">
 
             {/* Album Art (Spinning if playing) */}
             <div className={`relative h-16 w-16 rounded-full overflow-hidden border-2 border-white/10 shrink-0 ${isPlaying ? 'animate-spin-slow' : ''}`}>
-                {imageSrc ? (
-                    <img src={imageSrc} alt="Album Art" className="h-full w-full object-cover" />
+                {currentTrack.imageSrc ? (
+                    <img src={currentTrack.imageSrc} alt="Album Art" className="h-full w-full object-cover" />
                 ) : (
                     <div className="h-full w-full bg-gray-800 flex items-center justify-center">
                         <Music size={24} className="text-gray-500" />
@@ -56,8 +77,8 @@ export function GlobalPlayer() {
 
             {/* Track Info */}
             <div className="flex flex-col ml-4 mr-6 flex-1 min-w-0">
-                <span className="text-foreground font-bold truncate text-sm">{currentTrack.metadata?.name || 'Unknown Track'}</span>
-                <span className="text-gray-400 text-xs truncate">{currentTrack.metadata?.attributes?.[0]?.value || 'Unknown Artist'}</span>
+                <span className="text-foreground font-bold truncate text-sm">{currentTrack.title}</span>
+                <span className="text-gray-400 text-xs truncate">{currentTrack.artist}</span>
 
                 {/* Progress Bar (Mini) */}
                 <div className="w-full h-1 bg-white/10 rounded-full mt-2 relative group cursor-pointer"
@@ -80,7 +101,7 @@ export function GlobalPlayer() {
 
             {/* Controls */}
             <div className="flex items-center gap-4 shrink-0">
-                <button className="text-muted-foreground hover:text-foreground transition-colors">
+                <button onClick={prevTrack} className="text-muted-foreground hover:text-foreground transition-colors">
                     <SkipBack size={20} />
                 </button>
 
@@ -91,17 +112,17 @@ export function GlobalPlayer() {
                     {isPlaying ? <Pause size={20} fill="black" /> : <Play size={20} fill="black" className="ml-1" />}
                 </button>
 
-                <button className="text-muted-foreground hover:text-foreground transition-colors">
+                <button onClick={nextTrack} className="text-muted-foreground hover:text-foreground transition-colors">
                     <SkipForward size={20} />
                 </button>
             </div>
 
             <audio
                 ref={audioRef}
-                src={audioSrc}
+                src={currentTrack.audioSrc}
                 onTimeUpdate={handleTimeUpdate}
-                onEnded={() => togglePlay()}
-                autoPlay={isPlaying}
+                onEnded={() => nextTrack()} // Auto-advance
+                autoPlay={true}
             />
         </div>
     );

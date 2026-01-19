@@ -4,24 +4,20 @@ import { withFanAuth } from "@/lib/auth-guards";
 import { Typography, Input, Spin, Empty, Tabs } from "antd";
 import { SongCard } from "@/components/music/SongCard";
 import { UserCard } from "@/components/social/UserCard";
-import { useReadContract } from "wagmi";
+
+import { useQuery } from "@tanstack/react-query";
 import { useState, useEffect } from "react";
-import contractJson from "../../../artifacts/contracts/CR8TEMusic.sol/CR8TEMusic.json";
+import { getGatewayUrl } from "@/lib/utils";
+// import contractJson from "../../../artifacts/contracts/CR8TEMusic.sol/CR8TEMusic.json";
 
 const { Title } = Typography;
 const { Search } = Input;
-const ABI = contractJson.abi;
-const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
+// const ABI = contractJson.abi;
+// const CONTRACT_ADDRESS = process.env.NEXT_PUBLIC_CONTRACT_ADDRESS as `0x${string}`;
 
 function DiscoverPage() {
-    const { data: tracks, isLoading } = useReadContract({
-        address: CONTRACT_ADDRESS,
-        abi: ABI,
-        functionName: 'getAllTracks',
-        query: {
-            refetchInterval: 5000
-        }
-    });
+    // Removed legacy contract read
+    // const { data: tracks, isLoading } = useReadContract({...});
 
     const [users, setUsers] = useState<any[]>([]);
     const [searchTerm, setSearchTerm] = useState('');
@@ -34,11 +30,6 @@ function DiscoverPage() {
             .catch(err => console.error(err));
     }, []);
 
-    // Filter Logic
-    const filteredTracks = (tracks as any[])?.filter((t: any) =>
-        t.id?.toString().includes(searchTerm) || true // TODO: Add better track search if metadata available
-    );
-
     // Simplistic text search for users
     const filteredUsers = users.filter(u =>
         u.name.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -46,15 +37,40 @@ function DiscoverPage() {
         u.walletAddress?.toLowerCase().includes(searchTerm.toLowerCase())
     );
 
+    // FETCH V3 TRACKS (DB)
+    const { data: v3Tracks, isLoading: tracksLoading } = useQuery({
+        queryKey: ['discover-tracks'],
+        queryFn: async () => {
+            const res = await fetch('/api/music/feed');
+            if (!res.ok) throw new Error('Failed');
+            return res.json();
+        }
+    });
+
+    const filteredTracks = (v3Tracks as any[])?.filter((t: any) =>
+        t.title?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+        t.artist?.name?.toLowerCase().includes(searchTerm.toLowerCase())
+    ) || [];
+
     const items = [
         {
             key: '1',
             label: 'Music',
-            children: isLoading ? <div className="flex justify-center py-20"><Spin /></div> : (
+            children: tracksLoading ? <div className="flex justify-center py-20"><Spin /></div> : (
                 <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-6">
-                    {tracks && (tracks as any[]).length > 0 ? (
-                        (tracks as any[]).map((track: any) => (
-                            <SongCard key={track.id.toString()} track={track} />
+                    {filteredTracks.length > 0 ? (
+                        filteredTracks.map((track: any) => (
+                            <SongCard
+                                key={track.id}
+                                track={{
+                                    ...track,
+                                    artist: track.artist?.name || 'Unknown',
+                                    artistId: track.artistId,
+                                    imageSrc: getGatewayUrl(track.collection?.coverUrl || track.artist?.imageCid),
+                                    audioSrc: getGatewayUrl(track.audioUrl),
+                                    streamCount: track.streamCount
+                                }}
+                            />
                         ))
                     ) : (
                         <Empty description="No tracks found" />

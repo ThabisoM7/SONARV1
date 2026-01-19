@@ -28,8 +28,14 @@ export async function GET(req: Request, props: { params: Promise<{ address: stri
         const viewer = searchParams.get('viewer');
         let isFollowing = false;
 
-        const dbUser = await prisma.user.findUnique({
-            where: { walletAddress: address },
+        // Find user case-insensitively (Privy/Wagmi often mix Checksum/Lowercase)
+        const dbUser = await prisma.user.findFirst({
+            where: {
+                OR: [
+                    { walletAddress: address },
+                    { walletAddress: address.toLowerCase() }
+                ]
+            },
             include: {
                 _count: {
                     select: { followers: true, following: true }
@@ -37,9 +43,15 @@ export async function GET(req: Request, props: { params: Promise<{ address: stri
                 followers: viewer ? {
                     where: { follower: { walletAddress: viewer } }
                 } : false,
-                memberships: true
+                memberships: true,
+                tracks: {
+                    orderBy: { createdAt: 'desc' },
+                    include: { collection: true } // Need coverUrl from collection
+                }
             }
         });
+
+
 
         if (viewer && dbUser?.followers && dbUser.followers.length > 0) {
             isFollowing = true;
@@ -54,6 +66,9 @@ export async function GET(req: Request, props: { params: Promise<{ address: stri
             role: (privyUser.customMetadata as any)?.role || 'fan',
             likedSongs: (privyUser.customMetadata as any)?.likedSongs || [],
             playlists: (privyUser.customMetadata as any)?.playlists || [],
+
+            // Music
+            tracks: dbUser?.tracks || [], // Return DB tracks
 
             // Social Stats
             followersCount: dbUser?._count.followers || 0,
